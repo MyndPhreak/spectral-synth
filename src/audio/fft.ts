@@ -1,3 +1,19 @@
+const twiddleCache = new Map<number, { cos: Float64Array; sin: Float64Array }>()
+
+/** cos/sin of −2πk/n for k < n/2, computed once per FFT size. */
+function twiddles(n: number): { cos: Float64Array; sin: Float64Array } {
+  let t = twiddleCache.get(n)
+  if (!t) {
+    const half = n >> 1
+    t = {
+      cos: Float64Array.from({ length: half }, (_, k) => Math.cos((-2 * Math.PI * k) / n)),
+      sin: Float64Array.from({ length: half }, (_, k) => Math.sin((-2 * Math.PI * k) / n)),
+    }
+    twiddleCache.set(n, t)
+  }
+  return t
+}
+
 /** In-place complex radix-2 FFT (forward, no scaling). Length must be a power of two, else RangeError. */
 export function fft(re: Float64Array, im: Float64Array): void {
   const n = re.length
@@ -15,14 +31,15 @@ export function fft(re: Float64Array, im: Float64Array): void {
     }
   }
 
-  // Iterative butterflies.
+  // Iterative butterflies. Twiddle e^(−2πik/size) = table entry k·(n/size).
+  const { cos, sin } = twiddles(n)
   for (let size = 2; size <= n; size <<= 1) {
     const half = size >> 1
-    const step = (-2 * Math.PI) / size
+    const stride = n / size
     for (let start = 0; start < n; start += size) {
       for (let k = 0; k < half; k++) {
-        const wr = Math.cos(step * k)
-        const wi = Math.sin(step * k)
+        const wr = cos[k * stride]
+        const wi = sin[k * stride]
         const a = start + k
         const b = a + half
         const tr = re[b] * wr - im[b] * wi
