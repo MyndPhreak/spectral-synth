@@ -13,11 +13,12 @@ export const KEY_SEMITONES: Readonly<Record<string, number>> = {
 
 /** MIDI note for a physical key at `octave` (C4 = 60), or null when the key is not mapped or out of range. */
 export function keyToNote(code: string, octave: number): number | null {
-  void [code, octave]
-  return -1 // stub
+  const semitone = KEY_SEMITONES[code]
+  if (semitone === undefined) return null
+  const note = 12 * (octave + 1) + semitone
+  return note >= 0 && note <= 127 ? note : null
 }
 
 export function clampOctave(octave: number): number {
-  void octave
-  return NaN // stub
+  return Math.min(MAX_OCTAVE, Math.max(MIN_OCTAVE, octave))
 }
