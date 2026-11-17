@@ -249,7 +249,8 @@ describe('VoiceBank', () => {
   })
 
   it('setSettings releaseSeconds 2 -> about -30 dB after 1 s, ended after 2 s', () => {
-    const b = bank()
+    // 5 s model, so the release, not the model end, stops the voice.
+    const b = bank(model(steady([[1, 0.5]], 500), 440))
     b.setSettings({ releaseSeconds: 2 })
     b.noteOn(69, 127)
     render(b, 0.2)
