@@ -21,7 +21,8 @@ export const DEFAULT_LOOP_FRAMES = 20
 
 /** First and last frames whose energy is within TRIM_FLOOR_DB of the peak; endFrame is exclusive. */
 export function findTrim(model: SpectralModel): { startFrame: number; endFrame: number } {
-  return { startFrame: 0, endFrame: model.frameCount } // stub
+  void model
+  return { startFrame: -1, endFrame: -1 } // stub
 }
 
 /** Automatic markers: trimmed start and end, loop at the sustain frame. */
@@ -33,8 +34,8 @@ export function defaultRegions(model: SpectralModel): PlayRegions {
 
 /** Moves one marker to `frame`, clamped between its neighbours. */
 export function moveMarker(regions: PlayRegions, marker: MarkerName, frame: number, frameCount: number): PlayRegions {
-  void [marker, frame, frameCount]
-  return regions // stub
+  void [regions, marker, frame, frameCount]
+  return { startFrame: NaN, loopStart: NaN, loopEnd: NaN, endFrame: NaN } // stub
 }
 
 /** Throws RangeError when the order rule is broken. */
