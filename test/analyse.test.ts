@@ -14,11 +14,15 @@ function expectCode(fn: () => unknown, code: AnalysisErrorCode) {
   throw new Error(`expected AnalysisError '${code}', nothing was thrown`)
 }
 
-/** Partials with any non-zero amplitude over the whole model. */
-function audiblePartials(model: ReturnType<typeof analyse>): number {
+/**
+ * Partials above −60 dBFS in the steady state. Frames within one window of either end are skipped:
+ * there the window straddles the abrupt start or end of the signal, which smears weak onset peaks.
+ */
+function audiblePartials(model: ReturnType<typeof analyse>, frameSize = 2048): number {
+  const edge = Math.ceil(frameSize / model.hopSize)
   let count = 0
   for (let k = 0; k < model.partialCount; k++) {
-    for (let f = 0; f < model.frameCount; f++) {
+    for (let f = edge; f < model.frameCount - edge; f++) {
       if (model.amp[f * model.partialCount + k] > 1e-3) {
         count++
         break
