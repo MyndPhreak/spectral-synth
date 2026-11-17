@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { hzToNote, noteName } from '../audio/notes'
 import { ANALYSIS_STATUS, useAnalysis } from '../composables/useAnalysis'
 import { usePlayback } from '../composables/usePlayback'
 import { useSample } from '../composables/useSample'
-
-const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B']
 
 const { sample } = useSample()
 const { model, status, error, resynth, run } = useAnalysis()
@@ -13,18 +12,12 @@ const resynthesis = usePlayback(resynth)
 
 const running = computed(() => status.value === ANALYSIS_STATUS.Running)
 
-/** Nearest note name and octave, e.g. 220 Hz -> "A3". */
-function noteName(hz: number): string {
-  const midi = Math.round(69 + 12 * Math.log2(hz / 440))
-  return `${NOTE_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`
-}
-
 const summary = computed(() => {
   const m = model.value
   if (!m) return null
   const partials = `${m.partialCount} partials`
   return m.mode === 'harmonic'
-    ? `Pitch: ${noteName(m.rootHz)} · ${m.rootHz.toFixed(1)} Hz · Harmonic · ${partials}`
+    ? `Pitch: ${noteName(hzToNote(m.rootHz))} · ${m.rootHz.toFixed(1)} Hz · Harmonic · ${partials}`
     : `Peaks · ${partials}`
 })
 
