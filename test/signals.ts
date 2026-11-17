@@ -88,3 +88,28 @@ export function peakAbs(signal: Float32Array): number {
   for (const v of signal) m = Math.max(m, Math.abs(v))
   return m
 }
+
+/** Goertzel magnitude at `hz`, normalised so a full-scale sine reads ≈ its amplitude. */
+export function magnitudeAt(signal: Float32Array, hz: number, sampleRate = SR): number {
+  const w = (2 * Math.PI * hz) / sampleRate
+  const c = 2 * Math.cos(w)
+  let s1 = 0
+  let s2 = 0
+  for (const x of signal) {
+    const s0 = x + c * s1 - s2
+    s2 = s1
+    s1 = s0
+  }
+  return (2 * Math.sqrt(Math.max(0, s1 * s1 + s2 * s2 - c * s1 * s2))) / signal.length
+}
+
+/** Strongest frequency in [lo, hi], scanned in 0.5 Hz steps. */
+export function strongest(signal: Float32Array, lo: number, hi: number, sampleRate = SR): number {
+  let best = lo
+  let bestMag = -1
+  for (let hz = lo; hz <= hi; hz += 0.5) {
+    const m = magnitudeAt(signal, hz, sampleRate)
+    if (m > bestMag) [best, bestMag] = [hz, m]
+  }
+  return best
+}

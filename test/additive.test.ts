@@ -1,63 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { MODEL_VERSION, type SpectralModel } from '../src/audio/model'
+import { type SpectralModel } from '../src/audio/model'
 import { renderAdditive } from '../src/synth/additive'
 import { analyse } from '../src/audio/analyse'
-import { peakAbs, sawtooth, SR } from './signals'
-
-/** One frame = list of [ratio, amp] per partial. All frames must have the same partial count. */
-function makeModel(frames: [number, number][][], rootHz: number, hopSize = 441, sampleRate = SR): SpectralModel {
-  const partialCount = frames[0].length
-  const amp = new Float32Array(frames.length * partialCount)
-  const ratio = new Float32Array(frames.length * partialCount)
-  frames.forEach((f, i) =>
-    f.forEach(([r, a], k) => {
-      ratio[i * partialCount + k] = r
-      amp[i * partialCount + k] = a
-    }),
-  )
-  return {
-    version: MODEL_VERSION,
-    sampleRate,
-    hopSize,
-    frameCount: frames.length,
-    mode: 'harmonic',
-    rootHz,
-    pitchConfidence: 1,
-    partialCount,
-    amp,
-    ratio,
-    f0Track: new Float32Array(frames.length).fill(rootHz),
-  }
-}
-
-function steady(partials: [number, number][], frameCount: number): [number, number][][] {
-  return Array.from({ length: frameCount }, () => partials)
-}
-
-/** Goertzel magnitude at `hz`, normalised so a full-scale sine reads ≈ its amplitude. */
-function magnitudeAt(signal: Float32Array, hz: number, sampleRate = SR): number {
-  const w = (2 * Math.PI * hz) / sampleRate
-  const c = 2 * Math.cos(w)
-  let s1 = 0
-  let s2 = 0
-  for (const x of signal) {
-    const s0 = x + c * s1 - s2
-    s2 = s1
-    s1 = s0
-  }
-  return (2 * Math.sqrt(Math.max(0, s1 * s1 + s2 * s2 - c * s1 * s2))) / signal.length
-}
-
-/** Strongest frequency in [lo, hi] scanned in 0.5 Hz steps. */
-function strongest(signal: Float32Array, lo: number, hi: number): number {
-  let best = lo
-  let bestMag = -1
-  for (let hz = lo; hz <= hi; hz += 0.5) {
-    const m = magnitudeAt(signal, hz)
-    if (m > bestMag) [best, bestMag] = [hz, m]
-  }
-  return best
-}
+import { makeModel, steady } from './models'
+import { magnitudeAt, peakAbs, sawtooth, SR, strongest } from './signals'
 
 describe('renderAdditive', () => {
   it('one 440 Hz partial at target 440 -> strongest output is 440 Hz', () => {
