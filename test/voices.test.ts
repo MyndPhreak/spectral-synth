@@ -271,3 +271,108 @@ describe('VoiceBank', () => {
     expect(b.voiceCount).toBe(0)
   })
 })
+
+describe('VoiceBank trim and loop', () => {
+  /** One partial at `rootHz`, level per frame from `levels`. */
+  const levelModel = (levels: number[], rootHz = 440) => model(levels.map((a): Frame => [[1, a]]), rootHz)
+  const regions = (startFrame: number, loopStart: number, loopEnd: number, endFrame: number): PlayRegions => ({
+    startFrame,
+    loopStart,
+    loopEnd,
+    endFrame,
+  })
+  const withRegions = (m: SpectralModel, r: PlayRegions, settings?: Partial<VoiceSettings>) => {
+    const b = new VoiceBank(SR, settings)
+    b.setModel(m, r)
+    return b
+  }
+  /** Peak levels in 20 ms windows from `from` to `to` seconds. */
+  const levelsBetween = (out: Float32Array, from: number, to: number) => {
+    const levels: number[] = []
+    for (let t = from; t < to; t += 0.02) levels.push(levelAt(out, t))
+    return levels
+  }
+  // Level 1 for frames 0..9, falling 1.0 -> 0.2 across frames 10..29, then 0.2.
+  const falling = Array.from({ length: 100 }, (_, f) => (f < 10 ? 1 : f < 30 ? 1 - (0.8 * (f - 10)) / 19 : 0.2))
+
+  it('held note repeats the loop: long after the model would end, the level still swings between ~1.0 and ~0.2', () => {
+    const b = withRegions(levelModel(falling), regions(0, 10, 30, 100))
+    b.noteOn(69, 127)
+    const levels = levelsBetween(render(b, 3), 2, 2.6)
+    expect(Math.max(...levels)).toBeGreaterThan(0.85)
+    expect(Math.min(...levels)).toBeLessThan(0.3)
+    expect(b.voiceCount).toBe(1)
+  })
+
+  it('loop seam does not click: level jumps 0.2 -> 1.0 at the wrap, max sample step stays < 0.05', () => {
+    const b = withRegions(levelModel(falling.map((a) => a), 98), regions(0, 10, 30, 100))
+    b.noteOn(43, 127) // ≈ 98 Hz, full scale
+    const out = render(b, 3)
+    expect(peakAbs(out)).toBeGreaterThan(0.9)
+    expect(maxStep(out)).toBeLessThan(0.05)
+  })
+
+  it('startFrame 20 on a model silent in frames 0..19 -> full level within 10 ms', () => {
+    const levels = Array.from({ length: 100 }, (_, f) => (f < 20 ? 0 : 0.5))
+    const b = withRegions(levelModel(levels), regions(20, 50, 51, 100))
+    b.noteOn(69, 127)
+    expect(levelAt(render(b, 0.1), 0.01)).toBeCloseTo(0.5, 2)
+  })
+
+  it('endFrame 50 of 100 -> a released voice ends by frame 50 (0.5 s)', () => {
+    const b = withRegions(sine440, regions(0, 10, 11, 50), { releaseSeconds: 60 })
+    b.noteOn(69, 127)
+    render(b, 0.05)
+    b.noteOff(69)
+    const out = render(b, 1)
+    expect(peakAbs(out.subarray(Math.round(0.46 * SR)))).toBe(0)
+    expect(b.voiceCount).toBe(0)
+  })
+
+  it('noteOff inside the loop -> the voice plays on past loopEnd towards endFrame', () => {
+    // Level 1.0 for frames 0..59, 0.3 from frame 60; loop 10..19.
+    const b = withRegions(levelModel(Array.from({ length: 100 }, (_, f) => (f < 60 ? 1 : 0.3))), regions(0, 10, 20, 100), {
+      releaseSeconds: 60,
+    })
+    b.noteOn(69, 127)
+    const held = render(b, 0.5)
+    b.noteOff(69)
+    const after = render(b, 0.8)
+    const ratio = levelAt(after, 0.7) / levelAt(held, 0.4)
+    expect(ratio).toBeGreaterThan(0.25)
+    expect(ratio).toBeLessThan(0.32)
+  })
+
+  it('setRegions while held: a voice past the new loop end wraps into the new loop, without a restart', () => {
+    // Level 1.0 for frames 0..49, 0.4 from frame 50; loop first at 60..69 (level 0.4), then moved to 10..19 (level 1.0).
+    const b = withRegions(levelModel(Array.from({ length: 100 }, (_, f) => (f < 50 ? 1 : 0.4))), regions(0, 60, 70, 100))
+    b.noteOn(69, 127)
+    const before = render(b, 1)
+    expect(levelAt(before, 0.9)).toBeCloseTo(0.4, 1)
+    b.setRegions(regions(0, 10, 20, 100))
+    const after = render(b, 0.5)
+    expect(levelAt(after, 0.3)).toBeCloseTo(1, 1)
+    expect(b.voiceCount).toBe(1)
+  })
+
+  it('setRegions with endFrame before a released voice -> the voice ends on the next block', () => {
+    const b = withRegions(sine440, regions(0, 10, 11, 100), { releaseSeconds: 60 })
+    b.noteOn(69, 127)
+    render(b, 0.05)
+    b.noteOff(69)
+    render(b, 0.55) // position ≈ frame 60
+    b.setRegions(regions(0, 10, 11, 40))
+    const out = render(b, 0.1)
+    expect(peakAbs(out.subarray(BLOCK))).toBe(0)
+    expect(b.voiceCount).toBe(0)
+  })
+
+  it('setRegions with invalid regions -> RangeError, and playback keeps the old regions', () => {
+    const b = withRegions(sine440, regions(0, 10, 11, 100))
+    b.noteOn(69, 127)
+    render(b, 0.2)
+    expect(() => b.setRegions(regions(0, 30, 30, 100))).toThrow(RangeError)
+    expect(levelAt(render(b, 0.5), 0.3)).toBeCloseTo(0.5, 2)
+    expect(b.voiceCount).toBe(1)
+  })
+})
