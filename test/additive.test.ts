@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { MODEL_VERSION, type SpectralModel } from '../src/audio/model'
 import { renderAdditive } from '../src/synth/additive'
-import { peakAbs, SR } from './signals'
+import { analyse } from '../src/audio/analyse'
+import { peakAbs, sawtooth, SR } from './signals'
 
 /** One frame = list of [ratio, amp] per partial. All frames must have the same partial count. */
 function makeModel(frames: [number, number][][], rootHz: number, hopSize = 441, sampleRate = SR): SpectralModel {
@@ -108,6 +109,20 @@ describe('renderAdditive', () => {
   it('quiet output is not boosted', () => {
     const out = renderAdditive(makeModel(steady([[1, 0.1]], 50), 440), 440)
     expect(peakAbs(out)).toBeCloseTo(0.1, 2)
+  })
+
+  it('round trip: analyse(sawtooth 220) -> render at 220 -> analyse again keeps harmonics 1..10 within 1 dB', () => {
+    const first = analyse(sawtooth(220, 1), SR)
+    const second = analyse(renderAdditive(first, first.rootHz), SR)
+    // Compare mean harmonic levels over the middle half of the frames (edges hold the padding ramps).
+    const meanDb = (m: SpectralModel, k: number) => {
+      const lo = Math.floor(m.frameCount / 4)
+      const hi = Math.floor((3 * m.frameCount) / 4)
+      let sum = 0
+      for (let f = lo; f < hi; f++) sum += m.amp[f * m.partialCount + k]
+      return 20 * Math.log10(sum / (hi - lo))
+    }
+    for (let k = 0; k < 10; k++) expect(Math.abs(meanDb(second, k) - meanDb(first, k))).toBeLessThanOrEqual(1)
   })
 
   it('unknown model version throws RangeError', () => {
