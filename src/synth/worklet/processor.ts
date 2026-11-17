@@ -14,7 +14,10 @@ class AdditiveVoicesProcessor extends AudioWorkletProcessor {
   private handle(msg: EngineMessage): void {
     switch (msg.type) {
       case 'model':
-        this.bank.setModel(msg.model, msg.sustainFrame)
+        this.bank.setModel(msg.model, msg.regions)
+        break
+      case 'regions':
+        this.bank.setRegions(msg.regions)
         break
       case 'noteOn':
         this.bank.noteOn(msg.note, msg.velocity)

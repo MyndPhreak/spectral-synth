@@ -1,4 +1,5 @@
 import { MODEL_VERSION, type SpectralModel } from '../audio/model'
+import { assertRegions, type PlayRegions } from './regions'
 
 export interface VoiceSettings {
   attackSeconds: number
@@ -71,7 +72,7 @@ export class VoiceBank {
   private readonly sampleRate: number
   private settings: VoiceSettings
   private model: SpectralModel | null = null
-  private sustainFrame = 0
+  private regions: PlayRegions = { startFrame: 0, loopStart: 0, loopEnd: 1, endFrame: 1 }
   private voices: Voice[] = []
   private counter = 0
   private releaseCoef = 0
@@ -85,13 +86,21 @@ export class VoiceBank {
     this.applySettings()
   }
 
-  /** Stops all voices at once. Throws RangeError on an unknown model version. */
-  setModel(model: SpectralModel, sustainFrame: number): void {
+  /** Stops all voices at once. Throws RangeError on an unknown model version or invalid regions. */
+  setModel(model: SpectralModel, regions: PlayRegions): void {
     if (model.version !== MODEL_VERSION) throw new RangeError(`Unknown spectral model version ${model.version}`)
+    assertRegions(regions, model.frameCount)
     this.model = model
-    this.sustainFrame = Math.min(Math.max(0, Math.round(sustainFrame)), model.frameCount - 1)
+    this.regions = { ...regions }
     this.framesPerSample = model.sampleRate / model.hopSize / this.sampleRate
     this.voices = this.makeVoices()
+  }
+
+  /** Changes the markers without stopping voices. Throws RangeError on invalid regions; the old ones stay. */
+  setRegions(regions: PlayRegions): void {
+    if (!this.model) return
+    assertRegions(regions, this.model.frameCount)
+    this.regions = { ...regions }
   }
 
   setSettings(settings: Partial<VoiceSettings>): void {
@@ -197,7 +206,9 @@ export class VoiceBank {
     const nyquist = this.sampleRate / 2
     const posStart = v.pos
     let posEnd = posStart + this.framesPerSample * n
-    if (v.state === 'held' && posStart <= this.sustainFrame) posEnd = Math.min(posEnd, this.sustainFrame)
+    // Stub: the loop start is used as the Phase 3 freeze frame.
+    const sustain = Math.min(this.regions.loopStart, last)
+    if (v.state === 'held' && posStart <= sustain) posEnd = Math.min(posEnd, sustain)
 
     // Envelope gain per sample: velocity × attack ramp × release × steal fade.
     const env = this.env

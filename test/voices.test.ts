@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SpectralModel } from '../src/audio/model'
+import type { PlayRegions } from '../src/synth/regions'
 import { noteToHz, VoiceBank, type VoiceSettings } from '../src/synth/voices'
 import { makeModel, steady, type Frame } from './models'
 import { magnitudeAt, peakAbs, strongest } from './signals'
@@ -11,9 +12,17 @@ const BLOCK = 128
 const model = (frames: Frame[], rootHz: number) => makeModel(frames, rootHz, HOP, SR)
 const sine440 = model(steady([[1, 0.5]], 100), 440)
 
+/** Phase 3 freeze: a one-frame loop at the sustain frame, no trim. */
+const freezeAt = (sustainFrame: number, frameCount: number): PlayRegions => ({
+  startFrame: 0,
+  loopStart: sustainFrame,
+  loopEnd: sustainFrame + 1,
+  endFrame: frameCount,
+})
+
 function bank(m: SpectralModel | null = sine440, sustainFrame = 50, settings?: Partial<VoiceSettings>): VoiceBank {
   const b = new VoiceBank(SR, settings)
-  if (m) b.setModel(m, sustainFrame)
+  if (m) b.setModel(m, freezeAt(sustainFrame, m.frameCount))
   return b
 }
 
@@ -215,14 +224,14 @@ describe('VoiceBank', () => {
     const b = bank()
     b.noteOn(69, 127)
     render(b, 0.1)
-    b.setModel(model(steady([[1, 0.5]], 100), 220), 50)
+    b.setModel(model(steady([[1, 0.5]], 100), 220), freezeAt(50, 100))
     expect(peakAbs(render(b, 0.05))).toBe(0)
     expect(b.voiceCount).toBe(0)
   })
 
   it('setModel with an unknown version -> RangeError', () => {
     const bad = { ...sine440, version: 2 } as unknown as SpectralModel
-    expect(() => new VoiceBank(SR).setModel(bad, 0)).toThrow(RangeError)
+    expect(() => new VoiceBank(SR).setModel(bad, freezeAt(0, bad.frameCount))).toThrow(RangeError)
   })
 
   it('partials above Nyquist at a high note are muted (no aliasing)', () => {
