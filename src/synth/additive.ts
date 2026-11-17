@@ -1,4 +1,4 @@
-import { notImplemented, type SpectralModel } from '../audio/model'
+import type { SpectralModel } from '../audio/model'
 
 /**
  * Renders the model as a bank of sine partials at `targetHz`.
@@ -6,5 +6,8 @@ import { notImplemented, type SpectralModel } from '../audio/model'
  * Throws RangeError on an unknown model version.
  */
 export function renderAdditive(model: SpectralModel, targetHz: number): Float32Array {
-  return notImplemented(model, targetHz)
+  // Stub: silent output of zero length.
+  void model
+  void targetHz
+  return new Float32Array(0)
 }
