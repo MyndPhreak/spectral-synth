@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import AnalysisPanel from './components/AnalysisPanel.vue'
 import SourceInput from './components/SourceInput.vue'
 import WaveformView from './components/WaveformView.vue'
 import { useSample } from './composables/useSample'
@@ -40,9 +41,9 @@ const info = computed(() => {
       <WaveformView :buffer="buffer" :position="position" @seek="play" />
     </div>
 
-    <div class="card muted">
+    <div class="card">
       <h2>2 · Analyse</h2>
-      <p class="meta">Pitch detection, FFT and harmonic resynthesis come next.</p>
+      <AnalysisPanel />
     </div>
   </main>
 </template>
@@ -74,9 +75,6 @@ header p,
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.card.muted {
-  opacity: 0.55;
 }
 h2 {
   margin: 0;
