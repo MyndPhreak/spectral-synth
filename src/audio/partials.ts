@@ -1,4 +1,3 @@
-import { notImplemented } from './model'
 import type { Peak } from './peaks'
 
 export interface FramePartials {
@@ -21,10 +20,12 @@ export function assignHarmonics(
   partialCount: number,
   tolerance: number = PARTIAL_TOLERANCE,
 ): FramePartials {
-  return notImplemented(peaks, f0, rootHz, partialCount, tolerance)
+  void [peaks, f0, rootHz, tolerance]
+  return { amp: new Float32Array(partialCount).fill(NaN), ratio: new Float32Array(partialCount).fill(NaN) } // stub
 }
 
 /** Greedy nearest-frequency tracking of peaks across frames. Output is `frames × partialCount`, row-major. */
 export function trackPeaks(framesPeaks: Peak[][], rootHz: number, maxPartials: number): TrackedPartials {
-  return notImplemented(framesPeaks, rootHz, maxPartials)
+  void [framesPeaks, rootHz, maxPartials]
+  return { amp: new Float32Array(1).fill(NaN), ratio: new Float32Array(1).fill(NaN), partialCount: -1 } // stub
 }
