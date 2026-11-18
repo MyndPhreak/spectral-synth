@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AnalysisPanel from './components/AnalysisPanel.vue'
+import PlayPanel from './components/PlayPanel.vue'
 import SourceInput from './components/SourceInput.vue'
 import WaveformView from './components/WaveformView.vue'
 import { useSample } from './composables/useSample'
@@ -44,6 +45,11 @@ const info = computed(() => {
     <div class="card">
       <h2>2 · Analyse</h2>
       <AnalysisPanel />
+    </div>
+
+    <div class="card">
+      <h2>3 · Play</h2>
+      <PlayPanel />
     </div>
   </main>
 </template>
