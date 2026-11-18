@@ -60,6 +60,8 @@ onBeforeUnmount(() => observer?.disconnect())
 <template>
   <div ref="wrap" class="wave">
     <canvas ref="canvas" @click="onClick" />
+    <!-- Overlay (e.g. region markers), positioned over the canvas. -->
+    <slot />
   </div>
 </template>
 

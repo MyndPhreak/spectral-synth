@@ -31,6 +31,8 @@ export interface UseSynth {
   regions: Ref<PlayRegions | null>
   /** Moves one marker, clamped between its neighbours. */
   moveMarker(marker: MarkerName, frame: number): void
+  /** Moves one marker by a number of frames from its current position. */
+  nudgeMarker(marker: MarkerName, frames: number): void
   /** Puts the markers back to their automatic positions. */
   resetRegions(): void
   /** Adds keyboard, focus and MIDI listeners. Returns a function that removes them. */
@@ -116,6 +118,10 @@ function moveMarker(marker: MarkerName, frame: number): void {
   const model = useAnalysis().model.value
   if (!model || !regions.value) return
   regions.value = moveRegionMarker(regions.value, marker, frame, model.frameCount)
+}
+
+function nudgeMarker(marker: MarkerName, frames: number): void {
+  if (regions.value) moveMarker(marker, regions.value[marker] + frames)
 }
 
 function resetRegions(): void {
@@ -207,6 +213,7 @@ export function useSynth(): UseSynth {
     noteOff,
     shiftOctave,
     moveMarker,
+    nudgeMarker,
     resetRegions,
     attachInputs,
   }
