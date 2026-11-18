@@ -300,7 +300,8 @@ describe('VoiceBank trim and loop', () => {
     b.noteOn(69, 127)
     const levels = levelsBetween(render(b, 3), 2, 2.6)
     expect(Math.max(...levels)).toBeGreaterThan(0.85)
-    expect(Math.min(...levels)).toBeLessThan(0.3)
+    // 20 ms peak windows smear the 0.2 dip slightly; a freeze would stay at one level and fail one bound.
+    expect(Math.min(...levels)).toBeLessThan(0.35)
     expect(b.voiceCount).toBe(1)
   })
 
