@@ -1,4 +1,5 @@
 import { MODEL_VERSION, type SpectralModel } from '../audio/model'
+import { assertRegions, type PlayRegions } from './regions'
 
 export interface VoiceSettings {
   attackSeconds: number
@@ -71,7 +72,7 @@ export class VoiceBank {
   private readonly sampleRate: number
   private settings: VoiceSettings
   private model: SpectralModel | null = null
-  private sustainFrame = 0
+  private regions: PlayRegions = { startFrame: 0, loopStart: 0, loopEnd: 1, endFrame: 1 }
   private voices: Voice[] = []
   private counter = 0
   private releaseCoef = 0
@@ -85,13 +86,21 @@ export class VoiceBank {
     this.applySettings()
   }
 
-  /** Stops all voices at once. Throws RangeError on an unknown model version. */
-  setModel(model: SpectralModel, sustainFrame: number): void {
+  /** Stops all voices at once. Throws RangeError on an unknown model version or invalid regions. */
+  setModel(model: SpectralModel, regions: PlayRegions): void {
     if (model.version !== MODEL_VERSION) throw new RangeError(`Unknown spectral model version ${model.version}`)
+    assertRegions(regions, model.frameCount)
     this.model = model
-    this.sustainFrame = Math.min(Math.max(0, Math.round(sustainFrame)), model.frameCount - 1)
+    this.regions = { ...regions }
     this.framesPerSample = model.sampleRate / model.hopSize / this.sampleRate
     this.voices = this.makeVoices()
+  }
+
+  /** Changes the markers without stopping voices. Throws RangeError on invalid regions; the old ones stay. */
+  setRegions(regions: PlayRegions): void {
+    if (!this.model) return
+    assertRegions(regions, this.model.frameCount)
+    this.regions = { ...regions }
   }
 
   setSettings(settings: Partial<VoiceSettings>): void {
@@ -180,7 +189,7 @@ export class VoiceBank {
     v.state = p.held ? 'held' : 'released'
     v.note = p.note
     v.gain = p.gain
-    v.pos = 0
+    v.pos = this.regions.startFrame
     v.phases.fill(0)
     v.age = 0
     v.releaseGain = 1
@@ -191,13 +200,23 @@ export class VoiceBank {
   /** Adds one sub-block of voice `v` to `out`; amp and frequency interpolate linearly across it. */
   private render(v: Voice, model: SpectralModel, out: Float32Array): void {
     const n = out.length
-    const { partialCount, amp, ratio, frameCount } = model
-    const last = frameCount - 1
+    const { partialCount, amp, ratio } = model
+    const { loopStart, loopEnd, endFrame } = this.regions
+    const last = endFrame - 1
+    const looping = v.state === 'held'
     const hz = noteToHz(v.note)
     const nyquist = this.sampleRate / 2
+
+    if (looping && v.pos >= loopEnd) v.pos = loopStart // markers moved behind a held voice
+    if (!looping && v.pos >= last) {
+      // End marker moved before a released voice: it ends now.
+      this.advanceState(v, last)
+      return
+    }
     const posStart = v.pos
     let posEnd = posStart + this.framesPerSample * n
-    if (v.state === 'held' && posStart <= this.sustainFrame) posEnd = Math.min(posEnd, this.sustainFrame)
+    if (looping && posStart >= loopStart && posEnd >= loopEnd) posEnd -= loopEnd - loopStart
+    if (!looping) posEnd = Math.min(posEnd, last)
 
     // Envelope gain per sample: velocity × attack ramp × release × steal fade.
     const env = this.env
@@ -209,12 +228,13 @@ export class VoiceBank {
       env[i] = v.gain * Math.min(1, (v.age + i) / attackSamples) * v.releaseGain * v.stealGain
     }
 
-    // Frame indices and blend weights at the sub-block start (s) and end (e).
+    // Frame indices and blend weights at the sub-block start (s) and end (e). While looping, the frame
+    // after loopEnd − 1 is loopStart, so the seam interpolates like any two adjacent frames.
     const s0 = Math.min(last, Math.floor(posStart))
-    const s1 = Math.min(last, s0 + 1)
+    const s1 = this.nextFrame(s0, looping)
     const st = posStart - s0
     const e0 = Math.min(last, Math.floor(posEnd))
-    const e1 = Math.min(last, e0 + 1)
+    const e1 = this.nextFrame(e0, looping)
     const et = posEnd - e0
 
     for (let k = 0; k < partialCount; k++) {
@@ -241,6 +261,12 @@ export class VoiceBank {
     v.pos = posEnd
     v.age += n
     this.advanceState(v, last)
+  }
+
+  /** Frame after `f`: wraps to loopStart while looping, else stops at the last frame before endFrame. */
+  private nextFrame(f: number, looping: boolean): number {
+    const { loopStart, loopEnd, endFrame } = this.regions
+    return looping && f + 1 >= loopEnd ? loopStart : Math.min(endFrame - 1, f + 1)
   }
 
   private advanceState(v: Voice, last: number): void {

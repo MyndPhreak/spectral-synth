@@ -2,12 +2,17 @@
 import { computed } from 'vue'
 import AnalysisPanel from './components/AnalysisPanel.vue'
 import PlayPanel from './components/PlayPanel.vue'
+import RegionMarkers from './components/RegionMarkers.vue'
 import SourceInput from './components/SourceInput.vue'
 import WaveformView from './components/WaveformView.vue'
+import { useAnalysis } from './composables/useAnalysis'
 import { useSample } from './composables/useSample'
 import { usePlayback } from './composables/usePlayback'
+import { useSynth } from './composables/useSynth'
 
 const { sample, setSample } = useSample()
+const { model } = useAnalysis()
+const { regions, moveMarker, nudgeMarker, resetRegions } = useSynth()
 const buffer = computed(() => sample.value?.buffer ?? null)
 const { playing, position, play, toggle } = usePlayback(buffer)
 
@@ -39,7 +44,20 @@ const info = computed(() => {
         </div>
         <button class="primary" @click="toggle">{{ playing ? 'Pause' : 'Play' }}</button>
       </div>
-      <WaveformView :buffer="buffer" :position="position" @seek="play" />
+      <WaveformView :buffer="buffer" :position="position" @seek="play">
+        <RegionMarkers
+          v-if="model && regions"
+          :regions="regions"
+          :seconds-per-frame="model.hopSize / model.sampleRate"
+          :duration="buffer.duration"
+          @move="moveMarker"
+          @nudge="nudgeMarker"
+        />
+      </WaveformView>
+      <div v-if="model && regions" class="row">
+        <p class="meta">Drag the markers to trim the sound and set the loop.</p>
+        <button @click="resetRegions">Reset markers</button>
+      </div>
     </div>
 
     <div class="card">

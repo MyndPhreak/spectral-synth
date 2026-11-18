@@ -18,7 +18,8 @@ Microphone recording needs `localhost` or HTTPS.
 
 1. **Capture** (done): load an audio file (drag and drop or browse) or record from the mic, decode to an `AudioBuffer`, view the waveform, play and seek.
 2. **Analyse** (done): YIN pitch detection, FFT peak picking, a time-varying partials model (harmonic mode for pitched sounds, peak tracking otherwise) and additive resynthesis to A/B against the original. Plan: [docs/plans/2026-11-17-analyse-phase.md](docs/plans/2026-11-17-analyse-phase.md).
-3. **Play** (done): an AudioWorklet bank of 8 additive voices plays the model at any note. Held notes freeze on a sustain frame; released notes play on under a release fade. Input from the computer keyboard, Web MIDI and an on-screen piano. Plan: [docs/plans/2026-11-17-play-phase.md](docs/plans/2026-11-17-play-phase.md).
+3. **Play** (done): an AudioWorklet bank of 8 additive voices plays the model at any note. Held notes repeat a loop region; released notes play on to the end marker under a release fade. Input from the computer keyboard, Web MIDI and an on-screen piano. Plan: [docs/plans/2026-11-17-play-phase.md](docs/plans/2026-11-17-play-phase.md).
+   - **Trim and loop**: four markers on the waveform (Start, Loop start, Loop end, End), placed automatically after analysis and movable by drag, touch or arrow keys (Shift for 10 frames), also while a note sounds. The loop runs on the spectral model, so the seam needs no crossfade. A one-frame loop gives a frozen sustain. Plan: [docs/plans/2026-11-17-trim-and-loop.md](docs/plans/2026-11-17-trim-and-loop.md).
 4. **Polish**: spectrum view, controls, presets.
 
 ## Layout
@@ -38,7 +39,8 @@ src/
   synth/
     additive.ts       SpectralModel -> audio at any pitch (offline)
     voices.ts         real-time voice bank: sustain freeze, release, stealing
-    sustain.ts        chooses the frame a held note freezes on
+    sustain.ts        steadiest frame after the attack (default loop start)
+    regions.ts        trim and loop markers: auto placement, clamped moves
     engine.ts         AudioWorklet setup and message sending
     messages.ts       main thread -> worklet messages
     worklet/          AudioWorklet processor around voices.ts
@@ -57,6 +59,7 @@ src/
     AnalysisPanel.vue Analyse button, result, original / resynthesis playback
     PlayPanel.vue     piano, octave, release, MIDI status
     PianoKeys.vue     on-screen piano with pointer glide
+    RegionMarkers.vue trim and loop markers over the waveform
   App.vue
 test/                 Vitest unit tests on synthetic signals (signals.ts)
 ```

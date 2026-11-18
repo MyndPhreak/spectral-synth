@@ -1,11 +1,13 @@
 import type { SpectralModel } from '../audio/model'
 import { PROCESSOR_NAME, type EngineMessage } from './messages'
-import { findSustainFrame } from './sustain'
+import type { PlayRegions } from './regions'
 import processorUrl from './worklet/processor.ts?worker&url'
 
 export interface SynthEngine {
-  /** Computes the sustain frame, stops all notes, then sends the model. */
-  load(model: SpectralModel): void
+  /** Stops all notes, then sends the model and its markers. */
+  load(model: SpectralModel, regions: PlayRegions): void
+  /** Moves the markers; sounding notes keep playing. */
+  setRegions(regions: PlayRegions): void
   noteOn(note: number, velocity: number): void
   noteOff(note: number): void
   allNotesOff(): void
@@ -30,10 +32,11 @@ export async function createEngine(ctx: AudioContext): Promise<SynthEngine> {
 
   const send = (msg: EngineMessage) => node.port.postMessage(msg)
   return {
-    load(model) {
+    load(model, regions) {
       send({ type: 'allNotesOff' })
-      send({ type: 'model', model, sustainFrame: findSustainFrame(model) })
+      send({ type: 'model', model, regions })
     },
+    setRegions: (regions) => send({ type: 'regions', regions }),
     noteOn: (note, velocity) => send({ type: 'noteOn', note, velocity }),
     noteOff: (note) => send({ type: 'noteOff', note }),
     allNotesOff: () => send({ type: 'allNotesOff' }),

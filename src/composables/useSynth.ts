@@ -5,6 +5,7 @@ import { hzToNote } from '../audio/notes'
 import { clampOctave, DEFAULT_OCTAVE, keyToNote } from '../input/keyboard'
 import { connectMidi, type MidiStatus } from '../input/midi'
 import { createEngine, type SynthEngine } from '../synth/engine'
+import { defaultRegions, moveMarker as moveRegionMarker, type MarkerName, type PlayRegions } from '../synth/regions'
 import { DEFAULT_VOICE_SETTINGS } from '../synth/voices'
 import { useAnalysis } from './useAnalysis'
 
@@ -26,6 +27,14 @@ export interface UseSynth {
   noteOn(note: number, velocity?: number): void
   noteOff(note: number): void
   shiftOctave(delta: -1 | 1): void
+  /** Trim and loop markers for the loaded model; null before a model is loaded. */
+  regions: Ref<PlayRegions | null>
+  /** Moves one marker, clamped between its neighbours. */
+  moveMarker(marker: MarkerName, frame: number): void
+  /** Moves one marker by a number of frames from its current position. */
+  nudgeMarker(marker: MarkerName, frames: number): void
+  /** Puts the markers back to their automatic positions. */
+  resetRegions(): void
   /** Adds keyboard, focus and MIDI listeners. Returns a function that removes them. */
   attachInputs(): () => void
 }
@@ -36,6 +45,7 @@ const octave = ref(DEFAULT_OCTAVE)
 const releaseSeconds = ref(DEFAULT_VOICE_SETTINGS.releaseSeconds)
 const midiStatus = ref<MidiStatus | null>(null)
 const audioSuspended = ref(false)
+const regions = shallowRef<PlayRegions | null>(null)
 
 let engine: SynthEngine | null = null
 let enginePromise: Promise<SynthEngine> | null = null
@@ -84,12 +94,14 @@ function shiftOctave(delta: -1 | 1): void {
 async function loadModel(model: SpectralModel | null): Promise<void> {
   allNotesOff()
   ready.value = false
+  regions.value = null
   if (!model) return
   try {
     const e = await getEngine()
     // A newer model may have arrived while the engine was created.
     if (useAnalysis().model.value !== model) return
-    e.load(model)
+    regions.value = defaultRegions(model)
+    e.load(model, regions.value)
     // Start in the octave that holds the original pitch, so the A..; keys reach it.
     octave.value = clampOctave(Math.floor(hzToNote(model.rootHz) / 12) - 1)
     ready.value = true
@@ -100,9 +112,29 @@ async function loadModel(model: SpectralModel | null): Promise<void> {
 
 watch(useAnalysis().model, loadModel, { immediate: true })
 watch(releaseSeconds, (s) => engine?.setRelease(s))
+watch(regions, (r) => r && ready.value && engine?.setRegions(r))
+
+function moveMarker(marker: MarkerName, frame: number): void {
+  const model = useAnalysis().model.value
+  if (!model || !regions.value) return
+  regions.value = moveRegionMarker(regions.value, marker, frame, model.frameCount)
+}
+
+function nudgeMarker(marker: MarkerName, frames: number): void {
+  if (regions.value) moveMarker(marker, regions.value[marker] + frames)
+}
+
+function resetRegions(): void {
+  const model = useAnalysis().model.value
+  if (model) regions.value = defaultRegions(model)
+}
 
 function isTyping(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+  // Marker handles take arrow keys, so key presses on them must not play notes either.
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.closest('[data-marker]') !== null)
+  )
 }
 
 function attachInputs(): () => void {
@@ -169,5 +201,20 @@ function attachInputs(): () => void {
 }
 
 export function useSynth(): UseSynth {
-  return { ready, heldNotes, octave, releaseSeconds, midiStatus, audioSuspended, noteOn, noteOff, shiftOctave, attachInputs }
+  return {
+    ready,
+    heldNotes,
+    octave,
+    releaseSeconds,
+    midiStatus,
+    audioSuspended,
+    regions,
+    noteOn,
+    noteOff,
+    shiftOctave,
+    moveMarker,
+    nudgeMarker,
+    resetRegions,
+    attachInputs,
+  }
 }
